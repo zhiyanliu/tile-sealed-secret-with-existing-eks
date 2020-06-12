@@ -1,0 +1,66 @@
+apiVersion: mahjong.io/v1alpha1
+kind: Tile
+metadata:
+    name: SealedSecret-With-Existing-EKS
+    category: ContainerApplication
+    version: 0.1.0
+    # Dependent on what kind of vendor service, to determine what input parameters are required.
+    # For example, dependentOnVendorService: EKS, that's required 'clusterName', 'masterRoleARN'
+    dependentOnVendorService: EKS
+# Specification
+spec:
+  inputs:
+    # String
+    - name: clusterName
+      inputType: String
+      require: true
+    # String
+    - name: masterRoleARN
+      inputType: String
+      require: true
+    # String
+    - name: namespace
+      inputType: String
+      require: false
+      defaultValue: kube-system
+    # String
+    - name: tls.crt
+      inputType: String
+      require: false
+      defaultValue: ""
+    - name: tls.key
+      inputType: String
+      require: false
+      defaultValue: ""
+
+  global:
+    env:
+      - name: NAMESPACE_NAME
+        valueRef: namespace
+      - name: TLS_KEY
+        valueRef: tls.key
+      - name: TLS_CRT
+        valueRef: tls.crt
+
+  preRun:
+    stages:
+      - name: SetupNamespaceForKey
+        command: |
+          cd $TILE_HOME/lib/k8s
+          sed -i -e 's/TLS_CRT/'$TLS_CRT'/g' ./key.yaml
+          sed -i -e 's/TLS_KEY/'$TLS_KEY'/g' ./key.yaml
+      - name: InstallExistingKeyIfHave
+        command: |
+          export KUBECONFIG=$WORK_HOME/kube.config
+          [[ -n "$TLS_CRT" && -n "$TLS_KEY" ]] && kubectl create ns $NAMESPACE_NAME || true
+      - name: SetupNamespaceForController
+        command: |
+          cd $TILE_HOME/lib/k8s
+          sed -i -e 's/NAMESPACE_NAME/'$NAMESPACE_NAME'/g' ./controller-0.12.4.yaml
+
+  manifests:
+    manifestType: K8s
+    files:
+      - k8s/controller-0.12.4.yaml
+
+  notes: []
